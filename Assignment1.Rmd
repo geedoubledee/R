@@ -1,0 +1,163 @@
+---
+title: "Assignment1"
+author: "Glen Dale Davis"
+date: "2023-01-29"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+FiveThirtyEight published an interesting article about Super Bowl commercials a couple years ago, entitled ["According to Super Bowl Ads, Americans Love America, Animals and Sex"](https://projects.fivethirtyeight.com/super-bowl-ads/). They researched over 200 commercials from the 10 brands that advertised the most between the year 2000 and the year 2020 (according to [superbowl-ads.com](superbowl-ads.com)). Then they used seven boolean variables to categorize all those ads:
+
+1. Was the ad trying to be funny?
+2. Did the ad show the product right away?
+3. Was the ad patriotic? 
+4. Did the ad feature a celebrity?
+5. Did the ad involve danger?
+6. Did the ad include animals?
+7. Did the ad use sex to sell its product?
+
+Their insights focused mainly on specific ads that were a yes to more than one of the above questions, and the writers were particularly tickled by combinations they considered bizarre (like ads that were simultaneously trying to be funny, included animals, and used sex to sell their products).
+
+## Load the Super Bowl Ads Data
+
+The Super Bowl ads data is loaded below, and a brief preview is displayed.
+
+```{r superbowl_ads_data}
+my_url <- "https://raw.githubusercontent.com/geedoubledee/superbowl-ads/main/superbowl-ads.csv"
+superbowl_ads_df <- read.csv(file=my_url, header=TRUE, stringsAsFactors=FALSE)
+tbl_df <- tibble::as_tibble(superbowl_ads_df)
+tbl_df
+
+```
+
+## Load the Required Packages
+
+The below packages required for analysis are loaded.
+
+```{r packages, message=FALSE}
+library(knitr)
+library(magrittr)
+library(plyr)
+library(dplyr)
+library(ggplot2)
+
+```
+
+## Subset the Data
+
+Since I'm primarily interested in analyzing ads based on the seventh question ("Did the ad use sex to sell its product?"), I've eliminated the other boolean variable columns from the dataset. I've also categorized the brands according to the industry to which they belong.
+
+```{r subset}
+superbowl_ads_df_new <- superbowl_ads_df
+superbowl_ads_df_new$brand[superbowl_ads_df_new$brand == "Hynudai"] <- "Hyundai" #fixing a spelling error in the df
+superbowl_ads_df_new %<>%
+    select(year, brand, superbowl_ads_dot_com_url, youtube_url, use_sex)
+
+alcohol <- superbowl_ads_df_new
+alcohol %<>%
+    filter(brand %in% c("Bud Light", "Budweiser")) %>%
+    mutate(industry="alcohol")
+
+soda <- superbowl_ads_df_new
+soda %<>%
+    filter(brand %in% c("Coca-Cola", "Pepsi")) %>%
+    mutate(industry="soda")
+
+vehicles <- superbowl_ads_df_new
+vehicles %<>%
+    filter(brand %in% c("Toyota", "Hyundai", "Kia")) %>%
+    mutate(industry="vehicles")
+
+sports <- superbowl_ads_df_new
+sports %<>%
+    filter(brand=="NFL") %>%
+    mutate(industry="sports")
+    
+snacks <- superbowl_ads_df_new
+snacks %<>%
+    filter(brand=="Doritos") %>%
+    mutate(industry="snacks")
+
+banking <- superbowl_ads_df_new
+banking %<>%
+    filter(brand=="E-Trade") %>%
+    mutate(industry="banking")
+
+superbowl_ads_df_new <- rbind(alcohol, soda, vehicles, sports, snacks, banking)
+
+tbl_df <- tibble::as_tibble(superbowl_ads_df_new)
+tbl_df
+
+```
+
+## Exploratory Data Analysis: By Brand
+
+Looking at the data by brand, the two things I find most interesting are both beverage-related.
+
+First, it appears that Bud Light uses sex to sell its product in a larger percentage of its Super Bowl ads than Budweiser does. Since both brands are owned by the same company, we might ask: does the company believe sex is a more useful marketing tool among Bud Light drinkers than Budweiser drinkers?
+
+Second, it appears that Pepsi uses sex to sell its product in a larger percentage of its Super Bowl ads than Coca-Cola does. Since these products are owned by different companies competing for (at least some of) the same market of soda-drinkers, we might ask: do these companies make their advertising decisions based on more than whether they think sex is a useful advertising tool, and what are those other considerations if so?
+
+```{r eda1}
+use_sex_false <- superbowl_ads_df_new
+use_sex_false %<>%
+    filter(use_sex=="False") %>%
+    mutate(use_sex=0)
+
+use_sex_true <- superbowl_ads_df_new
+use_sex_true %<>%
+    filter(use_sex=="True") %>%
+    mutate(use_sex=1)
+
+superbowl_ads_df_new <- rbind(use_sex_false, use_sex_true)
+
+brand_summary <- superbowl_ads_df_new
+brand_summary %<>%
+    group_by(brand) %>%
+    summarize(ads_using_sex=sum(use_sex),
+              total_ads=sum(use_sex==1, use_sex==0),
+              average_ads_using_sex=mean(use_sex)) %>%
+    arrange(desc(average_ads_using_sex))
+p1 <- ggplot(brand_summary,
+             aes(x = reorder(brand, -average_ads_using_sex),
+                 y = average_ads_using_sex,
+                 fill = brand)) +
+    geom_bar(stat="identity") +
+    labs(x = "Brand", y = "Percentage of Ads Using Sex", title = "A Summary of Brands Using Sex in Their Super Bowl Ads") +
+    ylim(0, 1) +
+    scale_fill_manual(values=c("pink", "plum", "pink1", "plum1", "pink2", "plum2", "pink3", "plum3", "pink4", "plum4"))
+p1
+
+```
+
+## Exploratory Data Analysis: By Industry
+
+Looking at the data by industry is interesting, but there are a few facts that make meaningful analysis difficult. Only 10 brands were researched, so some industries (e.g. snacks) are represented by only one brand, whereas others (e.g. vehicles) are represented by three brands. Also, an industry, i.e. alcohol, might be represented by two brands, but then both brands are actually owned by the same company.
+
+```{r eda2}
+industry_summary <- superbowl_ads_df_new
+industry_summary %<>%
+    group_by(industry) %>%
+    summarize(ads_using_sex=sum(use_sex),
+              total_ads=sum(use_sex==1, use_sex==0),
+              average_ads_using_sex=mean(use_sex)) %>%
+    arrange(desc(average_ads_using_sex))
+p2 <- ggplot(industry_summary,
+             aes(x = reorder(industry, -average_ads_using_sex),
+                 y = average_ads_using_sex,
+                 fill = industry)) +
+    geom_bar(stat="identity") +
+    labs(x = "Industry", y = "Percentage of Ads Using Sex", title = "A Summary of Industries Using Sex in Their Super Bowl Ads") +
+    ylim(0, 1) +
+    scale_fill_manual(values=c("pink", "plum", "pink1", "plum1", "pink2", "plum2"))
+p2
+```
+
+## Conclusions
+
+It would be great to look beyond these 10 brands to expand the industry analysis that is possible regarding Super Bowl ads. It would also be paramount to note all the parent companies of the brands as the research was expanded. 
